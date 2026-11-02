@@ -24,7 +24,15 @@ beforeEach(async () => {
       await collections[key].deleteMany(); 
   }})
 describe('auth API', () => {
-  
+  it('rejects invalid login request data', async () => {
+    const response = await request(app)
+      .post('/auth/login')
+      .send({ email: 'not-an-email', password: '' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('Invalid request body');
+  });
+
 
   it('add new user', async () => {
     const response = await request(app)

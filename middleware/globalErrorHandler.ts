@@ -15,7 +15,13 @@ export const GlobalErrorHandler = (err: any, req: Request, res: Response, next: 
     }
 
     if (err.name === 'ZodError') {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({
+            message: 'Invalid request body',
+            errors: err.issues.map((issue: { path: (string | number)[]; message: string }) => ({
+                field: issue.path.join('.'),
+                message: issue.message,
+            })),
+        });
     }
 
     res.status(500).json({ 

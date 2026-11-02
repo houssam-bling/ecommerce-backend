@@ -30,7 +30,6 @@ const productSchema = new schema<productInterface>({
     productInStock:{type:Boolean,required:false,default:true},
     productIsOffer:{type:Boolean,required:false,default:false},
     productCount:{type:Number,required:true,min:[0,"productCount must be greater than or equal to 0"]},
-
     productOfferPrice:{type:Number,required:false,
         validate:function(this:productInterface,value:number)
         {

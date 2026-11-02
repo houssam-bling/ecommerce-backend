@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt.ts';
 import {userModel} from '../model/user.ts'
+import { orderModel } from '../model/order.ts';
 
 export const protect = async (req: Request, res: Response, next: NextFunction)=>
 {
@@ -46,7 +47,7 @@ export const protect = async (req: Request, res: Response, next: NextFunction)=>
         if (err.name === 'TokenExpiredError') {
             return res.status(401).json({ message: 'token منتهي الصلاحية' });
         }
-        res.status(500).json({ message: err.message });
+        next(err)
     }
 }
 export const authorize = (...roles:string[])=>{
@@ -59,4 +60,21 @@ export const authorize = (...roles:string[])=>{
         return res.status(403).json({message:"لست مصرح"})
     }
 
+}
+export const isOwnerOrAdminOrder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const order = await orderModel.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        const user = (req as any).user;
+        if (order.userId.toString() !== user?._id.toString() && user?.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized to view this order' });
+        }
+        if(order.userId.toString() === user?._id.toString() || user?.role === 'admin') {
+            next();
+        }
+    } catch (err) {
+        next(err);
+    }
 }
