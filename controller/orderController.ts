@@ -1,76 +1,91 @@
 import mongoose from 'mongoose';
 import { type NextFunction, type Request, type Response } from 'express';
-import { orderModel } from '../model/order.ts';
+import { orderModel, type IOrderItem, type orderInterface } from '../model/order.ts';
 import { productModel } from '../model/product.ts';
+import type { IUser } from '../model/user.ts';
 
-type AuthenticatedRequest = Request & {
-    user?: { _id: mongoose.Types.ObjectId };
-};
+export interface Req extends Request
+{
+    user:IUser;
+}
+const getUserId = (req: Req) => req.user._id;
 
-const getUserId = (req: Request) => (req as AuthenticatedRequest).user?._id;
+export const createOrder = async (req: Req, res: Response, next: NextFunction) => {
+    const { products : productsBody , shippingAddress } = req.body;
 
-export const createOrder = async (req: Request, res: Response, next: NextFunction) => {
-    const { products, shippingAddress } = req.body;
-    const addressFields = ['street', 'city', 'state', 'zipCode', 'country'];
-    const hasValidAddress = shippingAddress && addressFields.every(
-        (field) => typeof shippingAddress[field] === 'string' && shippingAddress[field].trim(),
-    );
-    if (!Array.isArray(products) || products.length === 0 || !hasValidAddress) {
-        return res.status(400).json({ message: 'Products and shippingAddress are required' });
-    }
-
+    const products = (productsBody as IOrderItem[]);
+    const session = await mongoose.startSession();
     try {
-        const quantities: Record<string, number> = {};
-        for (const item of products) {
-            if (
-                !item ||
-                !mongoose.isValidObjectId(item.productId) ||
-                !Number.isInteger(item.quantity) ||
-                item.quantity < 1
-            ) {
-                return res.status(400).json({
-                    message: 'Each product requires a valid productId and positive integer quantity',
-                });
+        const userId = req.user._id;
+
+        
+
+        const createdOrder = await session.withTransaction(async ()=>{
+            let totalPrice = 0; 
+            const quantities = new Map<string,number>();
+            for(const item of products)
+            {
+                const id = item.productId.toString();
+                quantities.set(id, (quantities.get(id) ?? 0) + item.quantity);
             }
-            const productId = item.productId.toString();
-            quantities[productId] = (quantities[productId] ?? 0) + item.quantity;
-        }
+            const productIds = [...quantities.keys()];
 
-        const productIds = Object.keys(quantities);
-        const foundProducts = await productModel.find({ _id: { $in: productIds } });
-        if (foundProducts.length !== productIds.length) {
-            return res.status(400).json({ message: 'One or more products do not exist' });
-        }
+            const dbProducts = await productModel.find({_id:{$in:productIds}}).lean().select('productPrice productOfferPrice productIsOffer').session(session)
 
-        const orderProducts = [];
-        let totalPrice = 0;
-        for (const product of foundProducts) {
-            const quantity = quantities[product._id.toString()];
-            if (!product.productInStock || product.productCount < quantity) {
-                return res.status(400).json({
-                    message: `Insufficient stock for ${product.productName}`,
-                });
+            if (dbProducts.length !== productIds.length) 
+            {
+                throw new Error('One or more products do not exist');
             }
-            const price = product.productIsOffer && product.productOfferPrice
-                ? product.productOfferPrice
-                : product.productPrice;
-            orderProducts.push({ productId: product._id, quantity, price });
-            totalPrice += price * quantity;
-        }
 
-        const order = await orderModel.create({
-            userId: getUserId(req),
-            products: orderProducts,
-            shippingAddress,
-            totalPrice,
-        });
-        res.status(201).json({ message: 'Order created', order });
-    } catch (error) {
-        next(error);
+            const orderItems = dbProducts.map((item)=>{
+
+                const quantity = quantities.get(item._id.toString());
+                const price = item.productIsOffer && item.productOfferPrice 
+                    ? item.productOfferPrice 
+                    : item.productPrice;
+                    
+                totalPrice += price * (quantity as number);
+                
+                return { productId: item._id, quantity: quantity, price };
+            })
+            const bulkOps = [];
+            for (const [productId, quantity] of quantities) {
+                bulkOps.push({
+                    updateOne: {
+                        filter: { _id: productId, productCount: { $gte: quantity } },
+                        update: { $inc: { productCount: -quantity, productSales: quantity } }
+                    }
+                });
+            }              
+            const result = await productModel.bulkWrite(bulkOps,{session})
+
+            if(result.modifiedCount !== productIds.length)
+            {
+                throw new Error('Stock insufficient for some items')
+            }
+            const order = await orderModel.create([{
+                userId:userId,
+                products:orderItems,
+                shippingAddress:shippingAddress,
+                totalPrice:totalPrice,
+
+            }],{session})
+            return order[0];
+        })
+        res.status(201).json({ message: 'Order created',order:createdOrder});
+
+    } catch (error : any) {
+        if (error.message.includes('Stock insufficient') || error.message.includes('do not exist')) {
+            return res.status(400).json({ message: error.message });
+        }
+        next(error); 
+    }
+    finally {
+        await session.endSession();
     }
 };
 
-export const getMyOrders = async (req: Request, res: Response, next: NextFunction) => {
+export const getMyOrders = async (req: Req, res: Response, next: NextFunction) => {
     try {
         const orders = await orderModel.find({ userId: getUserId(req) }).sort({ createdAt: -1 });
         res.json(orders);
@@ -79,7 +94,7 @@ export const getMyOrders = async (req: Request, res: Response, next: NextFunctio
     }
 };
 
-export const getAllOrders = async (_req: Request, res: Response, next: NextFunction) => {
+export const getAllOrders = async (_req: Req, res: Response, next: NextFunction) => {
     try {
         const orders = await orderModel.find().sort({ createdAt: -1 });
         res.json(orders);
@@ -88,7 +103,7 @@ export const getAllOrders = async (_req: Request, res: Response, next: NextFunct
     }
 };
 
-export const getOrderById = async (req: Request, res: Response, next: NextFunction) => {
+export const getOrderById = async (req: Req, res: Response, next: NextFunction) => {
     try {
         const order = await orderModel.findById(req.params.id);
         if (!order) {
@@ -100,7 +115,7 @@ export const getOrderById = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-export const updateOrderStatus = async (req: Request, res: Response, next: NextFunction) => {
+export const updateOrderStatus = async (req: Req, res: Response, next: NextFunction) => {
     const validStatuses = ['pending', 'shipped', 'delivered', 'cancelled'];
     if (!validStatuses.includes(req.body.status)) {
         return res.status(400).json({ message: 'Invalid order status' });
@@ -121,7 +136,7 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
     }
 };
 
-export const deleteOrder = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteOrder = async (req: Req, res: Response, next: NextFunction) => {
     try {
         const order = await orderModel.findByIdAndDelete(req.params.id);
         if (!order) {

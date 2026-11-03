@@ -81,10 +81,11 @@ describe('orders API', () => {
             .post('/orders')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
-                products: [{ productId: product._id.toString(), quantity: 2 }],
+                products: [{ productId: product._id.toString(), quantity: 2,price:product.productPrice}],
                 shippingAddress: address,
-            });
+        });
 
+        console.log(response.body)
         expect(response.status).toBe(201);
         expect(response.body.order.totalPrice).toBe(40);
         expect(response.body.order.userId).toBe(userId.toString());
@@ -121,7 +122,8 @@ describe('orders API', () => {
             .send({
                 products: [{ productId: product._id.toString(), quantity: 2 }],
                 shippingAddress: address,
-            });
+        });
+        console.log(response.body)
 
         expect(response.status).toBe(400);
         await expect(orderModel.countDocuments()).resolves.toBe(0);

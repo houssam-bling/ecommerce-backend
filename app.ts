@@ -7,7 +7,17 @@ import orderRouter from './routes/orderRoute.ts';
 import { GlobalErrorHandler } from './middleware/globalErrorHandler.ts';
 import cookieParser from 'cookie-parser';
 import { globalRateLimit } from './middleware/rateLimits.ts';
+import cors from 'cors';
+
+const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim());
+
 export const app : Express = express();
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+}));
 app.use(express.json());
 app.use(cookieParser());
 app.use(globalRateLimit);

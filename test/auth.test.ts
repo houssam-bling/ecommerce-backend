@@ -24,6 +24,17 @@ beforeEach(async () => {
       await collections[key].deleteMany(); 
   }})
 describe('auth API', () => {
+  it('allows the configured frontend origin to send credentialed requests', async () => {
+    const response = await request(app)
+      .options('/auth/login')
+      .set('Origin', 'http://localhost:5173')
+      .set('Access-Control-Request-Method', 'POST');
+
+    expect(response.status).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
+  });
+
   it('rejects invalid login request data', async () => {
     const response = await request(app)
       .post('/auth/login')

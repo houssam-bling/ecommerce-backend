@@ -1,6 +1,8 @@
 import { type NextFunction, type Request, type Response } from 'express';
 import { z, type ZodType } from 'zod';
 
+import { type IAddress } from '../model/user.ts';
+
 const addressSchema = z.object({
     street: z.string().trim().min(1),
     city: z.string().trim().min(1),
@@ -10,15 +12,15 @@ const addressSchema = z.object({
 });
 
 const productFields = {
-    productName: z.string().trim().min(1),
+    productName: z.string().trim().min(5),
     productDescription: z.string().trim().min(1),
-    productCategory: z.array(z.string().trim().min(1)).min(1),
-    productMainImage: z.string().url(),
+    productCategory: z.array(z.string().trim().min(3)).min(1),
+    productMainImage: z.url(),
     productSideImages: z.array(z.string().url()).optional(),
     productPrice: z.number().min(0),
     productInStock: z.boolean().optional(),
     productIsOffer: z.boolean().optional(),
-    productCount: z.number().int().min(0),
+    productCount: z.number().int().min(0).optional(),
     productOfferPrice: z.number().min(0).optional(),
 };
 
