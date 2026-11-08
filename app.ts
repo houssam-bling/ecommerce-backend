@@ -4,6 +4,7 @@ import authRouter from './routes/authRoute.ts'
 import storeRouter from './routes/storeRoute.ts';
 import userRouter from './routes/userRoute.ts';
 import orderRouter from './routes/orderRoute.ts';
+import statesRouter from './routes/statesRoute.ts';
 import { GlobalErrorHandler } from './middleware/globalErrorHandler.ts';
 import cookieParser from 'cookie-parser';
 import { globalRateLimit } from './middleware/rateLimits.ts';
@@ -26,4 +27,5 @@ app.use('/auth',authRouter)
 app.use('/store', storeRouter);
 app.use('/users', userRouter);
 app.use('/orders', orderRouter);
+app.use('/stats', statesRouter);
 app.use(GlobalErrorHandler)
